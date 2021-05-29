@@ -1,0 +1,168 @@
+ 1. What is the total amount each customer spent at the restaurant?
+select s.customer_id,
+sum(p.price) as amt_spent
+from sales s
+join menu p
+on p.product_id=s.product_id
+group by 1
+order by 2 desc;
+
+2. How many days has each customer visited the restaurant?
+select customer_id,
+count(distinct order_date) as days_visited
+from sales
+group by 1
+order by 2 desc;
+
+3. What was the first item from the menu purchased by each customer?
+
+with x as
+(
+  select customer_id,
+  row_number() over(partition by customer_id),
+  product_id
+  from sales
+)
+select a.customer_id,
+a.product_id,
+m.product_name
+from x a
+join menu m
+on m.product_id=a.product_id
+where a.row_number=1;
+
+4. What is the most purchased item on the menu and how many times was it purchased by all customers?
+
+with temp_table as ( 
+select distinct product_id,
+count(product_id) over(partition by product_id) purchased
+from sales
+  )
+--select * from temp_table;
+select s.product_id,
+s.purchased,
+menu.product_name
+from temp_table s
+join menu
+on s.product_id=menu.product_id
+where s.product_id = (select max(product_id) from temp_table);
+
+5. Most popular item on the menu by customer?
+
+with temp_table as
+(
+select customer_id,
+  product_id,
+  count(product_id) as p_orders,
+  rank() over(partition by customer_id order by count(product_id) desc)
+  from sales
+  group by 1,2
+  order by 1,3 desc
+)
+select t.customer_id,
+t.product_id,
+t.p_orders,
+m.product_name
+from temp_table t
+join menu m
+on m.product_id=t.product_id
+where t.rank=1
+order by 1;
+
+6. first item purchased by customer
+
+with x as (
+select s.customer_id,
+s.order_date,
+s.product_id,
+rank() over(partition by s.customer_id order by s.order_date) r
+from sales s
+inner join members m
+on s.customer_id=m.customer_id
+where m.join_date <= s.order_date
+)
+select x.customer_id,
+x.product_id,
+menu.product_name
+from x
+join menu
+using (product_id)
+where r=1
+order by 1;
+
+8. amount spent by customer before becoming a member
+with x as (
+select s.customer_id,
+s.order_date,
+s.product_id,
+m.join_date
+from sales s
+inner join members m
+on s.customer_id=m.customer_id
+where m.join_date > s.order_date
+)
+select distinct x.customer_id,
+sum(m.price) over(partition by x.customer_id) as amt_spent
+--m.price
+from x
+join menu m 
+on x.product_id=m.product_id;
+ 
+- Q9 total points by customer if $1 -> 10 points and sushi is 2x points
+
+select s.customer_id,
+sum(
+case when m.product_name='sushi' then m.price*20
+else m.price*10
+end) as points
+from sales s
+join menu m 
+using (product_id)
+group by 1
+order by 2 desc;
+
+- Q10 points of members 2X
+
+with x as (
+select s.customer_id,
+s.order_date,
+s.product_id,
+m.join_date
+from sales s
+inner join members m
+on s.customer_id=m.customer_id
+--where m.join_date <= s.order_date
+)
+select distinct x.customer_id,
+sum(case when x.order_date < x.join_date then m.price*10
+   else m.price*20 end) as member_points
+from x
+join menu m
+using (product_id)
+where x.order_date <='2021-01-31'
+group by 1
+order by 2 desc;
+
+Recreating the table
+with x as (
+select s.customer_id,
+s.order_date,
+s.product_id,
+mem.join_date
+from sales s
+full outer join members mem
+using (customer_id)
+)
+select x.customer_id,
+x.order_date,
+m.product_name,
+m.price,
+(case when x.order_date < x.join_date then 'N'
+ when x.join_date is null then 'N'
+else 'Y' end) as member
+from x
+join menu m
+using (product_id)
+order by 1,2;
+
+​
